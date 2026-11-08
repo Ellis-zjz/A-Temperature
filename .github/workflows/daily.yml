@@ -19,7 +19,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install deps
-        run: pip install tushare pandas numpy
+        run: pip install tushare pandas numpy six lxml beautifulsoup4
 
       - name: Update data
         env:
