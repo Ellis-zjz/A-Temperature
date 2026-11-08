@@ -8,16 +8,15 @@ import json
 import os
 
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
-HISTORY_JSON = os.path.join(OUT_DIR, "history.json")
 INDEX_HTML = os.path.join(OUT_DIR, "index.html")
+HISTORY_JSON = os.path.join(OUT_DIR, "history.json")
 
 COMPONENT_NAMES = [
-    ("up_ratio",   "上涨家数占比",   "{:.1%}",  "全A上涨家数占有效样本比例"),
-    ("limit_diff", "涨停减跌停",     "{:.0f}",  "涨停家数 − 跌停家数"),
-    ("broke_rate", "炸板率（反向）", "{:.1%}",  "盘中触板未封住 / 曾涨停总数，取反向"),
-    ("yday_avg",   "昨涨停今涨幅",   "{:.2f}%", "昨日涨停股今日平均涨幅"),
-    ("max_streak", "最高连板",       "{:.0f}板", "当日市场最高连续涨停天数"),
-    ("promo",      "首板晋级率",     "{:.1%}",  "昨日首板今日二板比例"),
+    ("amount_total", "综合成交额",     "{:,.0f}亿",  "上证(含科创板)+深证主板+创业板合计成交额"),
+    ("turnover",     "综合换手率",     "{:.2f}%",    "三板块 Σ成交额/Σ流通市值（市值加权）"),
+    ("dev5",         "沪深300·MA5",   "{:+.2f}%",   "沪深300收盘价相对5日均线的偏离度"),
+    ("dev20",        "沪深300·MA20",  "{:+.2f}%",   "沪深300收盘价相对20日均线的偏离度"),
+    ("dev60",        "沪深300·MA60",  "{:+.2f}%",   "沪深300收盘价相对60日均线的偏离度"),
 ]
 
 
@@ -45,7 +44,7 @@ def render() -> None:
     env10 = latest.get("temp_env10")
     temp_color, temp_label = fmt_temp_color(env5)
 
-    # 六项指标行
+    # 构成指标行
     comp_rows = ""
     for key, name, fmt, desc in COMPONENT_NAMES:
         v = latest.get(key)
@@ -60,6 +59,9 @@ def render() -> None:
           <div class="comp-pct">{pct}</div>
           <div class="comp-val">{raw}</div>
         </div>"""
+
+    amt_txt = f"{latest['amount_total']:,.0f}" if latest.get('amount_total') is not None else '—'
+    to_txt = f"{latest['turnover']:.2f}%" if latest.get('turnover') is not None else '—'
 
     payload = json.dumps(data, ensure_ascii=False)
 
@@ -101,7 +103,7 @@ def render() -> None:
 
   .chart {{ width: 100%; height: 340px; }}
 
-  .comp-row {{ display: grid; grid-template-columns: 140px 1fr 44px 90px;
+  .comp-row {{ display: grid; grid-template-columns: 140px 1fr 44px 100px;
               align-items: center; gap: 12px; padding: 7px 0; font-size: 13px;
               border-bottom: 1px dashed var(--line); }}
   .comp-row:last-child {{ border-bottom: none; }}
@@ -132,10 +134,10 @@ def render() -> None:
       </div>
       <div class="stat-chip"><div class="num">{latest['temp'] if latest['temp'] is not None else '—'}</div><div class="lbl">当日温度</div></div>
       <div class="stat-chip"><div class="num">{env10 if env10 is not None else '—'}</div><div class="lbl">10日环境</div></div>
+      <div class="stat-chip"><div class="num">{amt_txt}</div><div class="lbl">成交额(亿)</div></div>
+      <div class="stat-chip"><div class="num">{to_txt}</div><div class="lbl">换手率</div></div>
       <div class="stat-chip chip-up"><div class="num">{latest['limit_up']}</div><div class="lbl">涨停</div></div>
       <div class="stat-chip chip-dn"><div class="num">{latest['limit_dn']}</div><div class="lbl">跌停</div></div>
-      <div class="stat-chip"><div class="num">{latest['broke_rate']:.1%}</div><div class="lbl">炸板率</div></div>
-      <div class="stat-chip"><div class="num">{latest['up_ratio']:.1%}</div><div class="lbl">上涨占比</div></div>
     </div>
   </div>
 
@@ -143,23 +145,39 @@ def render() -> None:
     <h2>01 情绪温度<span class="tag">近两年 · 灰=当日，橙=5日环境，蓝=10日环境</span></h2>
     <div id="chartTemp" class="chart"></div>
     <div style="margin-top:16px">
-      <h2 style="margin-bottom:10px">六项构成<span class="tag">分位 = 当前值在近 250 个交易日中的排位</span></h2>
+      <h2 style="margin-bottom:10px">构成指标<span class="tag">分位 = 当前值在近 250 个交易日中的排位</span></h2>
       {comp_rows}
     </div>
   </div>
 
   <div class="card">
-    <h2>02 涨跌停家数<span class="tag">近两年 · 红=涨停，绿=跌停</span></h2>
+    <h2>02 综合成交量<span class="tag">近两年 · 上证+深证主板+创业板 成交额（亿元）</span></h2>
+    <div id="chartAmount" class="chart"></div>
+  </div>
+
+  <div class="card">
+    <h2>03 综合换手率<span class="tag">近两年 · Σ成交额/Σ流通市值（%）</span></h2>
+    <div id="chartTurnover" class="chart"></div>
+  </div>
+
+  <div class="card">
+    <h2>04 沪深300 与均线<span class="tag">近两年 · 收盘价与 MA5/MA20/MA60</span></h2>
+    <div id="chartHS300" class="chart"></div>
+  </div>
+
+  <div class="card">
+    <h2>05 涨跌停家数<span class="tag">近两年 · 红=涨停，绿=跌停</span></h2>
     <div id="chartLimit" class="chart"></div>
   </div>
 
   <footer>
     <b>口径说明</b><br>
     样本：{data['meta']['sample']}<br>
-    涨跌停：{data['meta']['limit_rule']}<br>
-    炸板：{data['meta']['broke_rule']}<br>
+    成交量：{data['meta']['amount_rule']}<br>
+    换手率：{data['meta']['turnover_rule']}<br>
+    均线关系：{data['meta']['dev_rule']}<br>
     温度：{data['meta']['temp_rule']}<br>
-    数据源：本地 Tushare parquet 数据湖（日线）
+    数据源：本地 Tushare parquet 数据湖（日线 + daily_basic）· 沪深300 指数日线
   </footer>
   <div class="disclaimer">本页面由程序按固定规则自动生成，仅供复盘与学习，不构成任何投资建议。</div>
 </div>
@@ -174,6 +192,7 @@ const slice = arr => arr.slice(-N);
 const dates = DATA.dates.slice(-N).map(fmtDate);
 
 const axis = {{ axisLabel: {{ color: '#868e96', fontSize: 11 }}, axisLine: {{ lineStyle: {{ color: '#e9ecef' }} }} }};
+const legend = {{ top: 0, right: 0, textStyle: {{ color: '#868e96' }} }};
 
 // —— 情绪温度 ——
 const c1 = echarts.init(document.getElementById('chartTemp'));
@@ -190,12 +209,60 @@ c1.setOption({{
     {{ name: '5日环境', type: 'line', data: slice(DATA.temp_env5), showSymbol: false, connectNulls: true,
        lineStyle: {{ color: '#f76707', width: 2.5 }}, itemStyle: {{ color: '#f76707' }}, z: 3 }}
   ],
-  legend: {{ top: 0, right: 0, textStyle: {{ color: '#868e96' }} }}
+  legend
+}});
+
+// —— 综合成交量（堆叠柱） ——
+const c2 = echarts.init(document.getElementById('chartAmount'));
+c2.setOption({{
+  grid: {{ left: 56, right: 16, top: 24, bottom: 28 }},
+  tooltip: {{ trigger: 'axis', valueFormatter: v => v == null ? '—' : v + ' 亿' }},
+  xAxis: {{ type: 'category', data: dates, ...axis }},
+  yAxis: {{ type: 'value', name: '亿元', ...axis }},
+  series: [
+    {{ name: '上证', type: 'bar', stack: 'a', data: slice(DATA.amount_sh), itemStyle: {{ color: '#e03131' }} }},
+    {{ name: '深证主板', type: 'bar', stack: 'a', data: slice(DATA.amount_sz), itemStyle: {{ color: '#f76707' }} }},
+    {{ name: '创业板', type: 'bar', stack: 'a', data: slice(DATA.amount_chx), itemStyle: {{ color: '#378ADD' }} }}
+  ],
+  legend
+}});
+
+// —— 综合换手率 ——
+const c3 = echarts.init(document.getElementById('chartTurnover'));
+c3.setOption({{
+  grid: {{ left: 56, right: 16, top: 24, bottom: 28 }},
+  tooltip: {{ trigger: 'axis', valueFormatter: v => v == null ? '—' : v + '%' }},
+  xAxis: {{ type: 'category', data: dates, ...axis }},
+  yAxis: {{ type: 'value', name: '%', ...axis, scale: true }},
+  series: [
+    {{ name: '综合换手率', type: 'line', data: slice(DATA.components.turnover), showSymbol: false,
+       lineStyle: {{ color: '#7048e8', width: 1.8 }}, itemStyle: {{ color: '#7048e8' }} }}
+  ]
+}});
+
+// —— 沪深300 与均线 ——
+const c4 = echarts.init(document.getElementById('chartHS300'));
+c4.setOption({{
+  grid: {{ left: 56, right: 16, top: 24, bottom: 28 }},
+  tooltip: {{ trigger: 'axis' }},
+  xAxis: {{ type: 'category', data: dates, ...axis }},
+  yAxis: {{ type: 'value', scale: true, ...axis }},
+  series: [
+    {{ name: '沪深300', type: 'line', data: slice(DATA.hs300_close), showSymbol: false,
+       lineStyle: {{ color: '#212529', width: 1.8 }}, itemStyle: {{ color: '#212529' }}, z: 3 }},
+    {{ name: 'MA5', type: 'line', data: slice(DATA.hs300_ma5), showSymbol: false, connectNulls: true,
+       lineStyle: {{ color: '#f76707', width: 1 }}, itemStyle: {{ color: '#f76707' }} }},
+    {{ name: 'MA20', type: 'line', data: slice(DATA.hs300_ma20), showSymbol: false, connectNulls: true,
+       lineStyle: {{ color: '#378ADD', width: 1 }}, itemStyle: {{ color: '#378ADD' }} }},
+    {{ name: 'MA60', type: 'line', data: slice(DATA.hs300_ma60), showSymbol: false, connectNulls: true,
+       lineStyle: {{ color: '#7048e8', width: 1 }}, itemStyle: {{ color: '#7048e8' }} }}
+  ],
+  legend
 }});
 
 // —— 涨跌停家数 ——
-const c2 = echarts.init(document.getElementById('chartLimit'));
-c2.setOption({{
+const c5 = echarts.init(document.getElementById('chartLimit'));
+c5.setOption({{
   grid: {{ left: 42, right: 16, top: 24, bottom: 28 }},
   tooltip: {{ trigger: 'axis' }},
   xAxis: {{ type: 'category', data: dates, ...axis }},
@@ -204,10 +271,10 @@ c2.setOption({{
     {{ name: '涨停', type: 'bar', stack: 'l', data: slice(DATA.limit_up), itemStyle: {{ color: '#e03131' }} }},
     {{ name: '跌停', type: 'bar', stack: 'l', data: slice(DATA.limit_dn), itemStyle: {{ color: '#2f9e44' }} }}
   ],
-  legend: {{ top: 0, right: 0, textStyle: {{ color: '#868e96' }} }}
+  legend
 }});
 
-window.addEventListener('resize', () => {{ c1.resize(); c2.resize(); }});
+window.addEventListener('resize', () => {{ c1.resize(); c2.resize(); c3.resize(); c4.resize(); c5.resize(); }});
 </script>
 </body>
 </html>"""
