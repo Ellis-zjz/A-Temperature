@@ -41,7 +41,9 @@ def render() -> None:
 
     latest = data["latest"]
     date_fmt = f"{latest['date'][:4]}-{latest['date'][4:6]}-{latest['date'][6:]}"
-    temp_color, temp_label = fmt_temp_color(latest["temp"])
+    env5 = latest.get("temp_env5")
+    env10 = latest.get("temp_env10")
+    temp_color, temp_label = fmt_temp_color(env5)
 
     # 六项指标行
     comp_rows = ""
@@ -125,19 +127,20 @@ def render() -> None:
   <div class="card">
     <div class="hero">
       <div>
-        <div class="temp-big">{latest['temp'] if latest['temp'] is not None else '—'}<small> /100</small></div>
-        <div class="temp-meta">情绪温度 · <b>{temp_label}</b>（5日均线 {latest['temp5'] if latest['temp5'] is not None else '—'}）</div>
+        <div class="temp-big">{env5 if env5 is not None else '—'}<small> /100</small></div>
+        <div class="temp-meta">5日环境温度 · <b>{temp_label}</b></div>
       </div>
+      <div class="stat-chip"><div class="num">{latest['temp'] if latest['temp'] is not None else '—'}</div><div class="lbl">当日温度</div></div>
+      <div class="stat-chip"><div class="num">{env10 if env10 is not None else '—'}</div><div class="lbl">10日环境</div></div>
       <div class="stat-chip chip-up"><div class="num">{latest['limit_up']}</div><div class="lbl">涨停</div></div>
       <div class="stat-chip chip-dn"><div class="num">{latest['limit_dn']}</div><div class="lbl">跌停</div></div>
-      <div class="stat-chip"><div class="num">{latest['limit_diff']:+d}</div><div class="lbl">涨停−跌停</div></div>
       <div class="stat-chip"><div class="num">{latest['broke_rate']:.1%}</div><div class="lbl">炸板率</div></div>
       <div class="stat-chip"><div class="num">{latest['up_ratio']:.1%}</div><div class="lbl">上涨占比</div></div>
     </div>
   </div>
 
   <div class="card">
-    <h2>01 情绪温度<span class="tag">近两年 · 灰线=日值，橙线=5日均线</span></h2>
+    <h2>01 情绪温度<span class="tag">近两年 · 灰=当日，橙=5日环境，蓝=10日环境</span></h2>
     <div id="chartTemp" class="chart"></div>
     <div style="margin-top:16px">
       <h2 style="margin-bottom:10px">六项构成<span class="tag">分位 = 当前值在近 250 个交易日中的排位</span></h2>
@@ -180,10 +183,12 @@ c1.setOption({{
   xAxis: {{ type: 'category', data: dates, ...axis }},
   yAxis: {{ type: 'value', min: 0, max: 100, ...axis }},
   series: [
-    {{ name: '日值', type: 'line', data: slice(DATA.temp), showSymbol: false,
+    {{ name: '当日温度', type: 'line', data: slice(DATA.temp), showSymbol: false,
        lineStyle: {{ color: '#adb5bd', width: 1 }}, itemStyle: {{ color: '#adb5bd' }}, z: 1 }},
-    {{ name: '5日均线', type: 'line', data: slice(DATA.temp5), showSymbol: false, connectNulls: true,
-       lineStyle: {{ color: '#f76707', width: 2.5 }}, itemStyle: {{ color: '#f76707' }}, z: 2 }}
+    {{ name: '10日环境', type: 'line', data: slice(DATA.temp_env10), showSymbol: false, connectNulls: true,
+       lineStyle: {{ color: '#378ADD', width: 1.8 }}, itemStyle: {{ color: '#378ADD' }}, z: 2 }},
+    {{ name: '5日环境', type: 'line', data: slice(DATA.temp_env5), showSymbol: false, connectNulls: true,
+       lineStyle: {{ color: '#f76707', width: 2.5 }}, itemStyle: {{ color: '#f76707' }}, z: 3 }}
   ],
   legend: {{ top: 0, right: 0, textStyle: {{ color: '#868e96' }} }}
 }});

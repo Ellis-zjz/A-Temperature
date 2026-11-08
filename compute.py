@@ -103,6 +103,12 @@ def pct_rank(series: pd.Series, window: int) -> pd.Series:
     return pd.Series(out)
 
 
+def env_temp_series(hist: pd.DataFrame, n: int) -> pd.Series:
+    """环境温度：当日温度的 n 日移动平均。
+    （曾尝试「先平滑指标再取分位」，因平滑序列方差小、分位在密集区被放大而更跳，弃用。）"""
+    return hist["temp"].rolling(n, min_periods=max(2, n // 2)).mean().round(1)
+
+
 def main():
     t0 = datetime.now()
     print("[1/3] 读取数据湖 …")
@@ -250,6 +256,8 @@ def main():
 
     hist["temp"] = temp.round(1)
     hist["temp5"] = temp5.round(1)
+    hist["temp_env5"] = env_temp_series(hist, 5)
+    hist["temp_env10"] = env_temp_series(hist, 10)
     hist["p_up"], hist["p_diff"], hist["p_broke"] = p_up.round(1), p_diff.round(1), p_broke.round(1)
     hist["p_yday"], hist["p_streak"], hist["p_promo"] = p_yday.round(1), p_streak.round(1), p_promo.round(1)
 
@@ -266,11 +274,13 @@ def main():
             "sample": f"全A（剔除北交所、上市不满{NEW_STOCK_DAYS}天新股、当日无成交）",
             "limit_rule": "昨收×(1±限制)四舍五入到分与收盘比对；主板及2020-08-24前创业板±10%、此后创业板/科创板±20%；当前简称含ST按±5%（加严：需盘中极值=收盘价=5%价）；历史ST状态按当前简称近似",
             "broke_rule": "盘中最高价触及涨停价但收盘未封住（日线近似）",
-            "temp_rule": f"六项指标各自在近{TEMP_WINDOW}个交易日窗口内的分位均值，0-100；是参照系，不是预测",
+            "temp_rule": f"当日温度=六项指标各自在近{TEMP_WINDOW}个交易日窗口内的分位均值，0-100；环境温度=当日温度的5/10日移动平均；是参照系，不是预测",
         },
         "dates": hist["date"].tolist(),
         "temp": null_list("temp"),
         "temp5": null_list("temp5"),
+        "temp_env5": null_list("temp_env5"),
+        "temp_env10": null_list("temp_env10"),
         "limit_up": hist["limit_up"].tolist(),
         "limit_dn": hist["limit_dn"].tolist(),
         "components": {k: null_list(k) for k in NAMES},
@@ -279,6 +289,8 @@ def main():
             "date": last["date"],
             "temp": None if pd.isna(last["temp"]) else float(last["temp"]),
             "temp5": None if pd.isna(last["temp5"]) else float(last["temp5"]),
+            "temp_env5": None if pd.isna(last["temp_env5"]) else float(last["temp_env5"]),
+            "temp_env10": None if pd.isna(last["temp_env10"]) else float(last["temp_env10"]),
             "up_ratio": float(last["up_ratio"]),
             "limit_up": int(last["limit_up"]),
             "limit_dn": int(last["limit_dn"]),

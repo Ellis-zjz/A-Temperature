@@ -18,6 +18,7 @@ import pandas as pd
 import tushare as ts
 
 import render  # 同目录，渲染 index.html
+import compute  # 同目录，复用 pct_rank / 常量
 
 HIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "history.json")
 STATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state.json")
@@ -138,14 +139,24 @@ def compute_day(df: pd.DataFrame, basic: pd.DataFrame, d: str,
 def rebuild_streak(pro, before_date: str, basic: pd.DataFrame) -> dict:
     """state.json 缺失时，回溯 BOOTSTRAP_DAYS 个交易日重建连板状态。"""
     cal = pro.query("trade_cal", exchange="SSE",
-                    end_date=before_date, is_open="1",
+                    end_date=before_date,
                     start_date=(pd.to_datetime(before_date) - pd.Timedelta(days=90)).strftime("%Y%m%d"))
+    cal = cal[cal["is_open"] == 1]
     days = sorted(cal["cal_date"].tolist())[-BOOTSTRAP_DAYS:-1]
     streak = {}
     for d in days:
         df = pro.daily(trade_date=d)
         _, streak = compute_day(df, basic, d, streak)
     return streak
+
+
+def recompute_env(hist: dict) -> None:
+    """环境温度 = 当日温度的 n 日移动平均（与 compute.py 定义一致）。"""
+    temps = pd.Series(hist["temp"], dtype=float)
+    for n, key in ((5, "temp_env5"), (10, "temp_env10")):
+        e = temps.rolling(n, min_periods=max(2, n // 2)).mean().round(1)
+        hist[key] = [None if pd.isna(v) else v for v in e]
+        hist["latest"][key] = e.iloc[-1] if not pd.isna(e.iloc[-1]) else None
 
 
 def append_temp(hist: dict, n_new: int) -> None:
@@ -179,9 +190,9 @@ def append_temp(hist: dict, n_new: int) -> None:
     last_i = len(hist["dates"]) - 1
     hist["latest"]["temp"] = temps[-1]
     hist["latest"]["temp5"] = t5[-1]
-    for k, col in zip(names, ["up", "diff", "broke", "yday", "streak", "promo"]):
-        hist["percentiles"][col].append(pct_at(last_i, k))
-        hist["percentiles_latest"][k] = hist["percentiles"][col][-1]
+    for k in names:
+        hist["percentiles"][k].append(pct_at(last_i, k))
+        hist["percentiles_latest"][k] = hist["percentiles"][k][-1]
     hist["generated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
@@ -196,7 +207,8 @@ def main():
     today = datetime.now().strftime("%Y%m%d")
 
     # 缺失的交易日（含今天，今天数据未出会查询为空则跳过）
-    cal = pro.query("trade_cal", exchange="SSE", start_date=last, end_date=today, is_open="1")
+    cal = pro.query("trade_cal", exchange="SSE", start_date=last, end_date=today)
+    cal = cal[cal["is_open"] == 1]
     missing = [d for d in sorted(cal["cal_date"].tolist()) if d > last]
     print(f"历史截止 {last}，缺失交易日：{missing or '无'}")
     if not missing:
@@ -252,6 +264,7 @@ def main():
     })
 
     append_temp(hist, n_new)
+    recompute_env(hist)
 
     with open(HIST, "w", encoding="utf-8") as fh:
         json.dump(hist, fh, ensure_ascii=False)
